@@ -3,13 +3,13 @@
 , config ? {}
 , runWallet ? true
 , runExplorer ? false
-, stats ? true
 , numCoreNodes ? 4
 , system ? builtins.currentSystem
 , pkgs ? import localLib.fetchNixPkgs { inherit system config; }
 , gitrev ? localLib.commitIdFromGitRepo ./../../../.git
 , ghcRuntimeArgs ? "-N2 -qg -A1m -I0 -T"
 , additionalNodeArgs ? ""
+, keepAlive ? true
 }:
 
 with localLib;
@@ -18,10 +18,13 @@ let
   executables =  {
     corenode = "${iohkPkgs.cardano-sl-node-static}/bin/cardano-node-simple";
     wallet = "${iohkPkgs.cardano-sl-wallet-new}/bin/cardano-node";
+    integration-test = "${iohkPkgs.cardano-sl-wallet-new}/bin/cardano-integration-test";
     launcher = "${iohkPkgs.cardano-sl-tools}/bin/cardano-launcher";
+    keygen = "${iohkPkgs.cardano-sl-tools}/bin/cardano-keygen";
     explorer = "${iohkPkgs.cardano-sl-explorer-static}/bin/cardano-explorer";
   };
   ifWallet = localLib.optionalString (runWallet);
+  ifKeepAlive = localLib.optionalString (keepAlive);
   iohkPkgs = import ./../../../default.nix { inherit config system pkgs gitrev; };
   src = ./../../../.;
   configFiles = pkgs.runCommand "cardano-config" {} ''
@@ -35,12 +38,6 @@ in pkgs.writeScript "demo-cluster" ''
   #!${pkgs.stdenv.shell}
   source ${src + "/scripts/common-functions.sh"}
   LOG_TEMPLATE=${src + "/log-configs/template-demo.yaml"}
-  function make_yaml_list {
-    local items="$1"
-    echo "$items" | sed 's/+RTS.*-RTS//g' | tr " " "\n" | grep -vE '^$' | while read l; do
-      echo "- \"$l\""
-    done
-  }
   function stop_cardano {
     trap "" INT TERM
     echo "Received TERM!"
@@ -61,8 +58,15 @@ in pkgs.writeScript "demo-cluster" ''
   system_start=$((`date +%s` + 15))
   echo "Using system start time "$system_start
 
-  echo "Generating Topology"
+
+
+  # Remove previous state
+  rm -rf ${stateDir}
   mkdir -p ${stateDir}
+  echo "Creating genesis keys..."
+  ${executables.keygen} --system-start 0 generate-keys-by-spec --genesis-out-dir ${stateDir}/genesis-keys
+
+  echo "Generating Topology"
   gen_kademlia_topology ${builtins.toString (numCoreNodes + 1)} ${stateDir}
 
   trap "stop_cardano" INT TERM
@@ -83,11 +87,38 @@ in pkgs.writeScript "demo-cluster" ''
     echo Launching wallet node:
     i=${builtins.toString numCoreNodes}
     wallet_args=" --tlscert ${stateDir}/tls-files/server.crt --tlskey ${stateDir}/tls-files/server.key --tlsca ${stateDir}/tls-files/server.crt"
-    wallet_args="$wallet_args --new-wallet --wallet-address 127.0.0.1:8090 --wallet-debug"
+    wallet_args="$wallet_args --wallet-address 127.0.0.1:8090 --wallet-db-path ${stateDir}/wallet-db --wallet-debug"
     node_args="$(node_cmd $i "$wallet_args" "$system_start" "${stateDir}" "" "${stateDir}/logs" "${stateDir}") --configuration-file ${configFiles}/configuration.yaml"
     echo Running wallet with args: $node_args
-    ${executables.wallet} $node_args &
+    ${executables.wallet} $node_args &> /dev/null &
     wallet_pid=$!
   ''}
-  sleep infinity
+  # Query node info until synced
+  SYNCED=0
+  while [[ $SYNCED == 0 ]]
+  do
+    PERC=$(curl -k http://localhost:8090/api/v1/node-info | jq .data.syncProgress.quantity)
+    if [[ $PERC == "100" ]]
+    then
+      SYNCED=1
+    else
+      sleep 5
+    fi
+  done
+  # import keys
+  echo "Importing poor HD keys/wallet..."
+
+  for i in {0..11}
+  do
+      echo "Imporing key$i.sk ..."
+      curl -k -X POST http://localhost:8090/api/wallets/keys -H 'cache-control: no-cache' -H 'content-type: application/json' -d "\"${stateDir}/genesis-keys/generated-keys/poor/key$i.sk\""
+  done
+  ${ifKeepAlive ''
+    sleep infinity
+  ''}
+  ${executables.integration-test}
+  TEST_STATUS=$?
+  stop_cardano
+  exit $?
+
 ''
