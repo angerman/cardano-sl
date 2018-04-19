@@ -36,6 +36,7 @@ let
   '';
 in pkgs.writeScript "demo-cluster" ''
   #!${pkgs.stdenv.shell}
+  EXIT_STATUS=0
   source ${src + "/scripts/common-functions.sh"}
   LOG_TEMPLATE=${src + "/log-configs/template-demo.yaml"}
   function stop_cardano {
@@ -53,7 +54,7 @@ in pkgs.writeScript "demo-cluster" ''
     ''}
     wait
     echo "Stopped all Cardano processes, exiting!"
-    exit 0
+    exit $EXIT_STATUS
   }
   system_start=$((`date +%s` + 15))
   echo "Using system start time "$system_start
@@ -116,9 +117,4 @@ in pkgs.writeScript "demo-cluster" ''
   ${ifKeepAlive ''
     sleep infinity
   ''}
-  ${executables.integration-test}
-  TEST_STATUS=$?
-  stop_cardano
-  exit $?
-
 ''
