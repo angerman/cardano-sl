@@ -27,10 +27,10 @@ base=$(dirname "$0")
 source "$base"/../common-functions.sh
 
 # If stack-work doesn't exist use function
-#if [[ ! -d "$base/../../.stack-work" ]]; then
-#    stack_build
-#    # TODO: Maybe wanna have an option to rebuild?
-#fi
+if [[ ! -d "$base/../../.stack-work" ]]; then
+    stack_build
+    # TODO: Maybe wanna have an option to rebuild?
+fi
 
 # Define the default amount of nodes to run
 DEFAULT_NODES_N=4
