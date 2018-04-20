@@ -1,0 +1,57 @@
+[submodule "ext-deps/canonical-json"]
+	path = ext-deps/canonical-json
+	url = https://github.com/well-typed/canonical-json.git
+[submodule "ext-deps/rocksdb-haskell-ng"]
+	path = ext-deps/rocksdb-haskell-ng
+	url = https://github.com/input-output-hk/rocksdb-haskell-ng.git
+[submodule "ext-deps/dns"]
+	path = ext-deps/dns
+	url = https://github.com/kazu-yamamoto/dns.git
+[submodule "ext-deps/cborg"]
+	path = ext-deps/cborg
+	url = https://github.com/well-typed/cborg
+[submodule "ext-deps/time-units"]
+	path = ext-deps/time-units
+	url = https://github.com/serokell/time-units.git
+[submodule "ext-deps/acid-state"]
+	path = ext-deps/acid-state
+	url = https://github.com/serokell/acid-state.git
+[submodule "ext-deps/kademlia"]
+	path = ext-deps/kademlia
+	url = https://github.com/serokell/kademlia.git
+[submodule "ext-deps/plutus-prototype"]
+	path = ext-deps/plutus-prototype
+	url = https://github.com/input-output-hk/plutus-prototype
+[submodule "ext-deps/hs-ed25519"]
+	path = ext-deps/hs-ed25519
+	url = https://github.com/thoughtpolice/hs-ed25519
+[submodule "ext-deps/cardano-report-server"]
+	path = ext-deps/cardano-report-server
+	url = https://github.com/input-output-hk/cardano-report-server.git
+[submodule "ext-deps/network-transport-tcp"]
+	path = ext-deps/network-transport-tcp
+	url = https://github.com/serokell/network-transport-tcp
+[submodule "ext-deps/network-transport"]
+	path = ext-deps/network-transport
+	url = https://github.com/serokell/network-transport
+[submodule "ext-deps/network-transport-inmemory"]
+	path = ext-deps/network-transport-inmemory
+	url = https://github.com/avieth/network-transport-inmemory
+[submodule "ext-deps/cardano-crypto"]
+	path = ext-deps/cardano-crypto
+	url = https://github.com/input-output-hk/cardano-crypto
+[submodule "ext-deps/cryptonite"]
+	path = ext-deps/cryptonite
+	url = https://github.com/haskell-crypto/cryptonite
+[submodule "ext-deps/engine.io"]
+	path = ext-deps/engine.io
+	url = https://github.com/serokell/engine.io.git
+[submodule "ext-deps/servant"]
+	path = ext-deps/servant
+	url = https://github.com/serokell/servant.git
+[submodule "ext-deps/servant-multipart"]
+	path = ext-deps/servant-multipart
+	url = https://github.com/serokell/servant-multipart.git
+[submodule "ext-deps/log-warper"]
+	path = ext-deps/log-warper
+	url = https://github.com/serokell/log-warper.git
