@@ -19,7 +19,7 @@ module Cardano.Wallet.Server.Plugins (
 import           Universum
 
 import           Cardano.Wallet.API as API
-import           Cardano.Wallet.API.V1.Errors (WalletError (..), toServantError, applicationJson)
+import           Cardano.Wallet.API.V1.Errors (WalletError (..), applicationJson, toServantError)
 import qualified Cardano.Wallet.Kernel.Diffusion as Kernel
 import qualified Cardano.Wallet.Kernel.Mode as Kernel
 import qualified Cardano.Wallet.LegacyServer as LegacyServer
@@ -61,9 +61,9 @@ import           Pos.Launcher.Configuration (HasConfigurations)
 import           Pos.Util.CompileInfo (HasCompileInfo)
 import           Pos.Wallet.Web.Mode (WalletWebMode)
 import           Pos.Wallet.Web.Server.Launcher (walletServeImpl, walletServerOuts)
+import           Pos.Wallet.Web.State (askWalletDB)
 import           Pos.Wallet.Web.Tracking.Sync (processSyncRequest)
 import           Pos.Wallet.Web.Tracking.Types (SyncQueue)
-import           Pos.Wallet.Web.State (askWalletDB)
 import           Pos.Web (serveWeb)
 import           Pos.Worker.Types (WorkerSpec, worker)
 import           Pos.WorkMode (WorkMode)
@@ -120,9 +120,19 @@ legacyWalletBackend WalletBackendParams {..} ntpStatus =
       ctx <- V0.walletWebModeContext
       let app = upgradeApplicationWS wsConn $
             if isDebugMode walletRunMode then
-              Servant.serve API.walletDevAPI $ LegacyServer.walletDevServer (catchWalletErrors . V0.convertHandler ctx) diffusion ntpStatus walletRunMode
+              Servant.serve API.walletDevAPI $ LegacyServer.walletDevServer
+                (catchWalletErrors . V0.convertHandler ctx)
+                diffusion
+                ntpStatus
+                walletAddress
+                walletRunMode
             else
-              Servant.serve API.walletAPI $ LegacyServer.walletServer (catchWalletErrors . V0.convertHandler ctx) diffusion ntpStatus
+              Servant.serve API.walletAPI $ LegacyServer.walletServer
+                (catchWalletErrors . V0.convertHandler ctx)
+                diffusion
+                ntpStatus
+                walletAddress
+
       return $ withMiddleware walletRunMode app
 
     exceptionHandler :: SomeException -> Response
