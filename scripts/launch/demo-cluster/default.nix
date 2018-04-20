@@ -24,8 +24,8 @@ let
   };
   ifWallet = localLib.optionalString (runWallet);
   ifKeepAlive = localLib.optionalString (keepAlive);
-  iohkPkgs = import ./../../../default.nix { inherit config system pkgs gitrev; };
-  src = ./../../../.;
+  iohkPkgs = import ./../../.. { inherit config system pkgs gitrev; };
+  src = ./../../..;
   configFiles = pkgs.runCommand "cardano-config" {} ''
     mkdir -pv $out
     cd $out
@@ -102,9 +102,16 @@ in pkgs.writeScript "demo-cluster" ''
     if [[ $PERC == "100" ]]
     then
       SYNCED=1
+    elif [[ SYNCED == 2 ]]
+    then
+      echo Blockchain Syncing: $PERC%
+      echo "Sync Failed, Exiting!"
+      stop_cardano
+      exit 1
     else
       echo Blockchain Syncing: $PERC%
-      sleep 5
+      SYNCED=2
+      sleep 30
     fi
   done
   # import keys
@@ -113,7 +120,7 @@ in pkgs.writeScript "demo-cluster" ''
   for i in {0..11}
   do
       echo "Imporing key$i.sk ..."
-      curl -k -X POST http://localhost:8090/api/wallets/keys -H 'cache-control: no-cache' -H 'content-type: application/json' -d "\"${stateDir}/genesis-keys/generated-keys/poor/key$i.sk\"" | jq
+      curl -k -X POST http://localhost:8090/api/wallets/keys -H 'cache-control: no-cache' -H 'content-type: application/json' -d "\"${stateDir}/genesis-keys/generated-keys/poor/key$i.sk\"" | jq .
   done
   ${ifKeepAlive ''
     sleep infinity

@@ -1,6 +1,7 @@
 { localLib ? import ./../../../../lib.nix
 , config ? {}
 , numCoreNodes ? 4
+, stateDir ? localLib.maybeEnv "CARDANO_STATE_DIR" "./state-demo"
 , system ? builtins.currentSystem
 , pkgs ? import localLib.fetchNixPkgs { inherit system config; }
 , gitrev ? "123456" # Dummy git revision to prevent mass rebuilds
@@ -12,15 +13,17 @@ with localLib;
 
 let
   demo-cluster = iohkPkgs.demoCluster.override {
-    inherit gitrev numCoreNodes;
+    inherit gitrev numCoreNodes stateDir;
     keepAlive = false;
   };
   executables =  {
     integration-test = "${iohkPkgs.cardano-sl-wallet-new}/bin/cardano-integration-test";
   };
-  iohkPkgs = import ./../../../../default.nix { inherit config system pkgs gitrev; };
+  iohkPkgs = import ./../../../.. { inherit config system pkgs gitrev; };
 in pkgs.writeScript "integration-tests" ''
   source ${demo-cluster}
+  mkdir -p scripts
+  cp -r ${stateDir}/tls-files scripts/tls-files
   ${executables.integration-test}
   EXIT_STATUS=$?
   stop_cardano
