@@ -65,7 +65,7 @@ in pkgs.writeScript "demo-cluster" ''
   rm -rf ${stateDir}
   mkdir -p ${stateDir}
   echo "Creating genesis keys..."
-  ${executables.keygen} --system-start 0 generate-keys-by-spec --genesis-out-dir ${stateDir}/genesis-keys
+  ${executables.keygen} --system-start 0 generate-keys-by-spec --genesis-out-dir ${stateDir}/genesis-keys --configuration-file ${configFiles}/configuration.yaml
 
   echo "Generating Topology"
   gen_kademlia_topology ${builtins.toString (numCoreNodes + 1)} ${stateDir}
