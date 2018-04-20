@@ -19,7 +19,6 @@ let
     corenode = "${iohkPkgs.cardano-sl-node-static}/bin/cardano-node-simple";
     wallet = "${iohkPkgs.cardano-sl-wallet-new}/bin/cardano-node";
     integration-test = "${iohkPkgs.cardano-sl-wallet-new}/bin/cardano-integration-test";
-    launcher = "${iohkPkgs.cardano-sl-tools}/bin/cardano-launcher";
     keygen = "${iohkPkgs.cardano-sl-tools}/bin/cardano-keygen";
     explorer = "${iohkPkgs.cardano-sl-explorer-static}/bin/cardano-explorer";
   };
@@ -36,6 +35,7 @@ let
   '';
 in pkgs.writeScript "demo-cluster" ''
   #!${pkgs.stdenv.shell}
+  export PATH=${pkgs.lib.makeBinPath (with pkgs; (with iohkPkgs; [ jq coreutils pkgs.curl gnused openssl cardano-sl-tools cardano-sl-wallet-new cardano-sl-node-static ]))}
   EXIT_STATUS=0
   source ${src + "/scripts/common-functions.sh"}
   LOG_TEMPLATE=${src + "/log-configs/template-demo.yaml"}
@@ -65,7 +65,7 @@ in pkgs.writeScript "demo-cluster" ''
   rm -rf ${stateDir}
   mkdir -p ${stateDir}
   echo "Creating genesis keys..."
-  ${executables.keygen} --system-start 0 generate-keys-by-spec --genesis-out-dir ${stateDir}/genesis-keys --configuration-file ${configFiles}/configuration.yaml
+  cardano-keygen --system-start 0 generate-keys-by-spec --genesis-out-dir ${stateDir}/genesis-keys --configuration-file ${configFiles}/configuration.yaml
 
   echo "Generating Topology"
   gen_kademlia_topology ${builtins.toString (numCoreNodes + 1)} ${stateDir}
@@ -76,14 +76,14 @@ in pkgs.writeScript "demo-cluster" ''
   do
     node_args="$(node_cmd $i "" "$system_start" "${stateDir}" "" "${stateDir}/logs" "${stateDir}") --configuration-file ${configFiles}/configuration.yaml"
     echo Launching core node $i with args: $node_args
-    ${executables.corenode} $node_args &> /dev/null &
+    cardano-node-simple $node_args &> /dev/null &
     core_pid[$i]=$!
 
   done
   ${ifWallet ''
     if [ ! -d ${stateDir}/tls-files ]; then
       mkdir -p ${stateDir}/tls-files
-      ${pkgs.openssl}/bin/openssl req -x509 -newkey rsa:2048 -keyout ${stateDir}/tls-files/server.key -out ${stateDir}/tls-files/server.crt -days 30 -nodes -subj "/CN=localhost"
+      openssl req -x509 -newkey rsa:2048 -keyout ${stateDir}/tls-files/server.key -out ${stateDir}/tls-files/server.crt -days 30 -nodes -subj "/CN=localhost"
     fi
     echo Launching wallet node:
     i=${builtins.toString numCoreNodes}
@@ -91,18 +91,19 @@ in pkgs.writeScript "demo-cluster" ''
     wallet_args="$wallet_args --wallet-address 127.0.0.1:8090 --wallet-db-path ${stateDir}/wallet-db --wallet-debug"
     node_args="$(node_cmd $i "$wallet_args" "$system_start" "${stateDir}" "" "${stateDir}/logs" "${stateDir}") --configuration-file ${configFiles}/configuration.yaml"
     echo Running wallet with args: $node_args
-    ${executables.wallet} $node_args &> /dev/null &
+    cardano-node $node_args &> /dev/null &
     wallet_pid=$!
   ''}
   # Query node info until synced
   SYNCED=0
   while [[ $SYNCED == 0 ]]
   do
-    PERC=$(${pkgs.curl}/bin/curl -k http://localhost:8090/api/v1/node-info | ${pkgs.jq}/bin/jq .data.syncProgress.quantity)
+    PERC=$(curl --silent -k http://localhost:8090/api/v1/node-info | jq .data.syncProgress.quantity)
     if [[ $PERC == "100" ]]
     then
       SYNCED=1
     else
+      echo Blockchain Syncing: $PERC%
       sleep 5
     fi
   done
@@ -112,7 +113,7 @@ in pkgs.writeScript "demo-cluster" ''
   for i in {0..11}
   do
       echo "Imporing key$i.sk ..."
-      ${pkgs.curl}/bin/curl -k -X POST http://localhost:8090/api/wallets/keys -H 'cache-control: no-cache' -H 'content-type: application/json' -d "\"${stateDir}/genesis-keys/generated-keys/poor/key$i.sk\""
+      curl -k -X POST http://localhost:8090/api/wallets/keys -H 'cache-control: no-cache' -H 'content-type: application/json' -d "\"${stateDir}/genesis-keys/generated-keys/poor/key$i.sk\"" | jq
   done
   ${ifKeepAlive ''
     sleep infinity
