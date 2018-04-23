@@ -22,6 +22,7 @@ let
     keygen = "${iohkPkgs.cardano-sl-tools}/bin/cardano-keygen";
     explorer = "${iohkPkgs.cardano-sl-explorer-static}/bin/cardano-explorer";
   };
+  demoClusterDeps = with pkgs; (with iohkPkgs; [ jq coreutils pkgs.curl gnused openssl cardano-sl-tools cardano-sl-wallet-new cardano-sl-node-static ])
   ifWallet = localLib.optionalString (runWallet);
   ifKeepAlive = localLib.optionalString (keepAlive);
   iohkPkgs = import ./../../.. { inherit config system pkgs gitrev; };
@@ -35,7 +36,9 @@ let
   '';
 in pkgs.writeScript "demo-cluster" ''
   #!${pkgs.stdenv.shell}
-  export PATH=${pkgs.lib.makeBinPath (with pkgs; (with iohkPkgs; [ jq coreutils pkgs.curl gnused openssl cardano-sl-tools cardano-sl-wallet-new cardano-sl-node-static ]))}
+  export PATH=${pkgs.lib.makeBinPath demoClusterDeps}
+  # Set to 0 (passing) by default. Tests using this cluster can set this variable
+  # to force the `stop_cardano` function to exit with a different code.
   EXIT_STATUS=0
   source ${src + "/scripts/common-functions.sh"}
   LOG_TEMPLATE=${src + "/log-configs/template-demo.yaml"}
@@ -107,8 +110,8 @@ in pkgs.writeScript "demo-cluster" ''
     then
       echo Blockchain Syncing: $PERC%
       echo "Sync Failed, Exiting!"
+      EXIT_STATUS=1
       stop_cardano
-      exit 1
     else
       echo Blockchain Syncing: $PERC%
       SYNCED=2
