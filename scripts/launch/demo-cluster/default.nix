@@ -81,6 +81,7 @@ in pkgs.writeScript "demo-cluster" ''
 
   done
   ${ifWallet ''
+    export LC_ALL=en_GB.UTF-8
     if [ ! -d ${stateDir}/tls-files ]; then
       mkdir -p ${stateDir}/tls-files
       openssl req -x509 -newkey rsa:2048 -keyout ${stateDir}/tls-files/server.key -out ${stateDir}/tls-files/server.crt -days 30 -nodes -subj "/CN=localhost"
