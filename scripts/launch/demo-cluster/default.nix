@@ -108,7 +108,7 @@ in pkgs.writeScript "demo-cluster" ''
     if [[ $PERC == "100" ]]
     then
       SYNCED=100
-    elif [[ SYNCED -ge 10 ]]
+    elif [[ $SYNCED -ge 10 ]]
     then
       echo Blockchain Syncing: $PERC%
       echo "Sync Failed, Exiting!"
