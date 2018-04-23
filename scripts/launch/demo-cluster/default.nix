@@ -22,7 +22,7 @@ let
     keygen = "${iohkPkgs.cardano-sl-tools}/bin/cardano-keygen";
     explorer = "${iohkPkgs.cardano-sl-explorer-static}/bin/cardano-explorer";
   };
-  demoClusterDeps = with pkgs; (with iohkPkgs; [ jq coreutils pkgs.curl gnused openssl cardano-sl-tools cardano-sl-wallet-new cardano-sl-node-static ]);
+  demoClusterDeps = with pkgs; (with iohkPkgs; [ jq coreutils pkgs.curl gnused openssl cardano-sl-tools cardano-sl-wallet-new cardano-sl-node-static gnugrep ]);
   ifWallet = localLib.optionalString (runWallet);
   ifKeepAlive = localLib.optionalString (keepAlive);
   iohkPkgs = import ./../../.. { inherit config system pkgs gitrev; };
@@ -37,6 +37,7 @@ let
 in pkgs.writeScript "demo-cluster" ''
   #!${pkgs.stdenv.shell}
   export PATH=${pkgs.lib.makeBinPath demoClusterDeps}
+  cat /etc/hosts
   # Set to 0 (passing) by default. Tests using this cluster can set this variable
   # to force the `stop_cardano` function to exit with a different code.
   EXIT_STATUS=0
@@ -45,6 +46,7 @@ in pkgs.writeScript "demo-cluster" ''
   function stop_cardano {
     trap "" INT TERM
     echo "Received TERM!"
+    echo "Started shutdown procedure at: $(date)"
     echo "Stopping Cardano core nodes"
     for pid in ''${core_pid[@]}
     do
@@ -75,16 +77,18 @@ in pkgs.writeScript "demo-cluster" ''
 
   trap "stop_cardano" INT TERM
   echo "Launching a demo cluster..."
+  mkdir -p ${stateDir}/logs/state-demo/logs
   for i in {0..${builtins.toString (numCoreNodes - 1)}}
   do
     node_args="$(node_cmd $i "" "$system_start" "${stateDir}" "" "${stateDir}/logs" "${stateDir}") --configuration-file ${configFiles}/configuration.yaml"
+    touch ${stateDir}/logs/state-demo/logs/node''${i}.log
     echo Launching core node $i with args: $node_args
     cardano-node-simple $node_args &> /dev/null &
     core_pid[$i]=$!
 
   done
   ${ifWallet ''
-    export LC_ALL=en_GB.UTF-8
+    #export LC_ALL=en_GB.UTF-8
     if [ ! -d ${stateDir}/tls-files ]; then
       mkdir -p ${stateDir}/tls-files
       openssl req -x509 -newkey rsa:2048 -keyout ${stateDir}/tls-files/server.key -out ${stateDir}/tls-files/server.crt -days 30 -nodes -subj "/CN=localhost"
@@ -95,8 +99,12 @@ in pkgs.writeScript "demo-cluster" ''
     # TODO: remove wallet-debug and use TLS when the tests support it
     wallet_args="$wallet_args --wallet-address 127.0.0.1:8090 --wallet-db-path ${stateDir}/wallet-db --wallet-debug"
     node_args="$(node_cmd $i "$wallet_args" "$system_start" "${stateDir}" "" "${stateDir}/logs" "${stateDir}") --configuration-file ${configFiles}/configuration.yaml"
+    touch ${stateDir}/logs/state-demo/logs/node''${i}.log
+    grep "INFO" ${stateDir}/logs/state-demo/logs/node''${i}.log &
+    echo ${stateDir}/logs/state-demo/logs/node''${i}.log
     echo Running wallet with args: $node_args
     cardano-node $node_args &> /dev/null &
+    echo "wallet started at $(date)"
     wallet_pid=$!
   ''}
   # Query node info until synced
