@@ -103,6 +103,7 @@ in pkgs.writeScript "demo-cluster" ''
   SYNCED=0
   while [[ $SYNCED == 0 ]]
   do
+    # TODO: switch to https when wallet-debug is removed
     PERC=$(curl --silent -k http://localhost:8090/api/v1/node-info | jq .data.syncProgress.quantity)
     if [[ $PERC == "100" ]]
     then
@@ -125,6 +126,7 @@ in pkgs.writeScript "demo-cluster" ''
   for i in {0..11}
   do
       echo "Imporing key$i.sk ..."
+      # TODO: switch to https when wallet-debug is removed
       curl -k -X POST http://localhost:8090/api/wallets/keys -H 'cache-control: no-cache' -H 'content-type: application/json' -d "\"${stateDir}/genesis-keys/generated-keys/poor/key$i.sk\"" | jq .
   done
   ${ifKeepAlive ''
