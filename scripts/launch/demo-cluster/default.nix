@@ -56,7 +56,7 @@ in pkgs.writeScript "demo-cluster" ''
     kill $wallet_pid
     ''}
     wait
-    echo "Stopped all Cardano processes, exiting!"
+    echo "Stopped all Cardano processes, exiting with code $EXIT_STATUS!"
     exit $EXIT_STATUS
   }
   system_start=$((`date +%s` + 15))
@@ -101,14 +101,14 @@ in pkgs.writeScript "demo-cluster" ''
   ''}
   # Query node info until synced
   SYNCED=0
-  while [[ $SYNCED == 0 ]]
+  while [[ $SYNCED != 100 ]]
   do
     # TODO: switch to https when wallet-debug is removed
     PERC=$(curl --silent -k http://localhost:8090/api/v1/node-info | jq .data.syncProgress.quantity)
     if [[ $PERC == "100" ]]
     then
-      SYNCED=1
-    elif [[ SYNCED == 2 ]]
+      SYNCED=100
+    elif [[ SYNCED -ge 10 ]]
     then
       echo Blockchain Syncing: $PERC%
       echo "Sync Failed, Exiting!"
@@ -116,16 +116,17 @@ in pkgs.writeScript "demo-cluster" ''
       stop_cardano
     else
       echo Blockchain Syncing: $PERC%
-      SYNCED=2
-      sleep 30
+      SYNCED=$((SYNCED + 1))
+      sleep 5
     fi
   done
+  echo Blockchain Synced: $PERC%
   # import keys
   echo "Importing poor HD keys/wallet..."
 
   for i in {0..11}
   do
-      echo "Imporing key$i.sk ..."
+      echo "Importing key$i.sk ..."
       # TODO: switch to https when wallet-debug is removed
       curl -k -X POST http://localhost:8090/api/wallets/keys -H 'cache-control: no-cache' -H 'content-type: application/json' -d "\"${stateDir}/genesis-keys/generated-keys/poor/key$i.sk\"" | jq .
   done
