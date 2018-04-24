@@ -3,41 +3,66 @@
 {-# LANGUAGE TypeFamilies        #-}
 
 module Cardano.Wallet.Kernel.PrefilterTx
-       ( prefilterTxs
+       ( PrefilteredBlock(..)
+       , prefilterBlock
        , ourUtxo
        ) where
 
 import           Universum
+
 import qualified Data.Map as Map
-import           Pos.Core (HasConfiguration, Address (..))
+import qualified Data.Set as Set
+
+import           Pos.Core (Address (..), HasConfiguration)
 import           Pos.Core.Txp (TxIn (..), TxOut (..), TxOutAux (..))
-import           Pos.Txp.Toil.Types (Utxo)
 import           Pos.Crypto (EncryptedSecretKey)
-import           Pos.Wallet.Web.Tracking.Decrypt (WalletDecrCredentials,
-                                                  eskToWalletDecrCredentials,
+import           Pos.Txp.Toil.Types (Utxo)
+import           Pos.Wallet.Web.Tracking.Decrypt (WalletDecrCredentials, eskToWalletDecrCredentials,
                                                   selectOwnAddresses)
 
-import           Cardano.Wallet.Kernel.Types (ResolvedTx(..))
+import           Cardano.Wallet.Kernel.DB.InDb (fromDb)
+import           Cardano.Wallet.Kernel.DB.Resolved (ResolvedBlock, ResolvedTx, rbTxs, rtxInputs,
+                                                    rtxOutputs)
 
 {-------------------------------------------------------------------------------
  Pre-filter Tx Inputs and Outputs to those that belong to the given Wallet.
 +-------------------------------------------------------------------------------}
 
-prefilterTxs
-    :: HasConfiguration
-    => EncryptedSecretKey    -- ^ Wallet's secret key
-    -> [ResolvedTx]
-    -> [ResolvedTx]          -- ^ Prefiltered [(inputs, outputs)]
-prefilterTxs esk
-    = map (prefilterTx wdc)
-    where wdc = eskToWalletDecrCredentials esk
+-- | Prefiltered block
+--
+-- A prefiltered block is a block that contains only inputs and outputs from
+-- the block that are relevant to the wallet.
+data PrefilteredBlock = PrefilteredBlock {
+      -- | Relevant inputs
+      pfbInputs  :: Set TxIn
+
+      -- | Relevant outputs
+    , pfbOutputs :: Utxo
+    }
+
+prefilterBlock :: HasConfiguration
+               => EncryptedSecretKey
+               -> ResolvedBlock
+               -> PrefilteredBlock
+prefilterBlock esk block = PrefilteredBlock {
+      pfbInputs  = Set.fromList . map fst $ concat inpss
+    , pfbOutputs = Map.unions outss
+    }
+  where
+    inpss :: [[(TxIn, TxOutAux)]]
+    outss :: [Utxo]
+    (inpss, outss) = unzip $ map (prefilterTx wdc) (block ^. rbTxs)
+
+    wdc :: WalletDecrCredentials
+    wdc = eskToWalletDecrCredentials esk
 
 prefilterTx :: WalletDecrCredentials
-             -> ResolvedTx
-             -> ResolvedTx
-prefilterTx wdc ResolvedTx{..} =
-    ResolvedTx  (ourResolvedTxPairs wdc rtxInputs)
-                (ourUtxo_ wdc rtxOutputs)
+            -> ResolvedTx
+            -> ([(TxIn, TxOutAux)], Utxo)
+prefilterTx wdc tx = (
+      ourResolvedTxPairs wdc (tx ^. rtxInputs  . fromDb)
+    , ourUtxo_           wdc (tx ^. rtxOutputs . fromDb)
+    )
 
 ourResolvedTxPairs :: WalletDecrCredentials
                    -> [(TxIn, TxOutAux)]

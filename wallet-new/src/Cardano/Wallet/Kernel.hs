@@ -24,26 +24,28 @@ module Cardano.Wallet.Kernel (
   , hasPending
   ) where
 
-import           Universum hiding (State)
 import           Control.Lens.TH
-import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as Map
 import           Data.Maybe (fromJust)
+import qualified Data.Set as Set
+import           Universum hiding (State)
 
 import           System.Wlog (Severity (..))
 
+import           Cardano.Wallet.Kernel.DB.Resolved (ResolvedBlock, ResolvedTx, rbTxs, rtxOutputs,
+                                                    rtxInputs)
 import           Cardano.Wallet.Kernel.Diffusion (WalletDiffusion (..))
-import           Cardano.Wallet.Kernel.PrefilterTx (prefilterTxs, ourUtxo)
-import           Cardano.Wallet.Kernel.Types (ResolvedBlock(..), ResolvedTx(..), txUtxo)
+import           Cardano.Wallet.Kernel.PrefilterTx (PrefilteredBlock(..), ourUtxo, prefilterBlock)
+import           Cardano.Wallet.Kernel.Types (txUtxo)
 
-import           Pos.Core (TxAux, HasConfiguration, sumCoins)
-import           Pos.Core.Txp (TxIn (..), Tx (..), TxAux (..), TxOutAux (..), TxOut (..), TxId)
-import           Pos.Txp (Utxo)
+import           Pos.Core (HasConfiguration, TxAux, sumCoins)
+import           Pos.Core.Txp (Tx (..), TxAux (..), TxId, TxIn (..), TxOut (..), TxOutAux (..))
 import           Pos.Crypto (EncryptedSecretKey, hash)
-import           Pos.Util.Chrono (OldestFirst, NE)
+import           Pos.Txp (Utxo)
+import           Pos.Util.Chrono (NE, OldestFirst)
 
-import           Cardano.Wallet.Orphans()
+import           Cardano.Wallet.Orphans ()
 
 {-------------------------------------------------------------------------------
   Wallet with State
@@ -71,7 +73,7 @@ data Wallet = WalletHdRnd {
       -- TODO: We may need to rethink having this in-memory
       -- ESK should _not_ end up in the wallet's acid-state log
       -- (for some reason..)
-    _walletESK :: EncryptedSecretKey
+    _walletESK     :: EncryptedSecretKey
 
     -- | Wallet state
     --
@@ -117,7 +119,7 @@ makeLenses ''State
 data PassiveWallet = PassiveWallet {
       -- | Send log message
       _walletLogMessage :: Severity -> Text -> IO ()
-    , _wallets :: MVar Wallets
+    , _wallets          :: MVar Wallets
     }
 
 makeLenses ''PassiveWallet
@@ -267,9 +269,9 @@ applyBlock' pw b wid = do
     (State utxo' pending' balance') <- getWalletState pw wid
     w <- fromJust <$> findWallet pw wid
 
-    let prefilteredTxs = prefilterTxs (w ^. walletESK) (rbTxs b)
-        (utxo'', balanceDelta) = updateUtxo prefilteredTxs utxo'
-        pending''              = updatePending prefilteredTxs pending'
+    let prefBlock              = prefilterBlock (w ^. walletESK) b
+        (utxo'', balanceDelta) = updateUtxo    prefBlock utxo'
+        pending''              = updatePending prefBlock pending'
         balance''              = balanceDelta + balance'
 
     updateWalletState pw wid $ State utxo'' pending'' balance''
@@ -281,23 +283,20 @@ applyBlocks :: HasConfiguration
               -> IO ()
 applyBlocks pw = mapM_ (applyBlock pw)
 
-updateUtxo :: [ResolvedTx]  -- ^ Prefiltered [(inputs, outputsUtxo)]
-            -> Utxo -> (Utxo, Balance)
-updateUtxo prefilteredTxs currentUtxo
+updateUtxo :: PrefilteredBlock
+           -> Utxo -> (Utxo, Balance)
+updateUtxo PrefilteredBlock{..} currentUtxo
     = (utxo', balanceDelta)
     where
-        prefilteredIns = txIns prefilteredTxs
-        unionUtxo = Map.union (txOuts prefilteredTxs) currentUtxo
-        utxo' = utxoRemoveInputs unionUtxo prefilteredIns
-
-        unionUtxoRestricted  = utxoRestrictToInputs unionUtxo prefilteredIns
+        unionUtxo = Map.union pfbOutputs currentUtxo
+        utxo' = utxoRemoveInputs unionUtxo pfbInputs
+        unionUtxoRestricted  = utxoRestrictToInputs unionUtxo pfbInputs
         balanceDelta = balance unionUtxo - balance unionUtxoRestricted
 
-
-updatePending :: [ResolvedTx]  -- ^ Prefiltered [(inputs, outputsUtxo)]
+updatePending :: PrefilteredBlock
               -> Pending -> Pending
-updatePending prefilteredTxs
-    = Map.filter (\t -> disjoint (txAuxInputSet t) (txIns prefilteredTxs))
+updatePending PrefilteredBlock{..}
+    = Map.filter (\t -> disjoint (txAuxInputSet t) pfbInputs)
 
 txAuxInputSet :: TxAux -> Set TxIn
 txAuxInputSet = Set.fromList . NE.toList . _txInputs . taTx
@@ -310,15 +309,6 @@ m `restrictKeys` s = m `Map.intersection` Map.fromSet (const ()) s
 
 disjoint :: Ord a => Set a -> Set a -> Bool
 disjoint a b = Set.null (a `Set.intersection` b)
-
-txIns :: [ResolvedTx] -> Set TxIn
-txIns = unionTxIns . map rtxInputs
-
-txOuts :: [ResolvedTx] -> Utxo
-txOuts = unionTxOuts . map rtxOutputs
-
-unionTxIns :: [[(TxIn, TxOutAux)]] -> Set TxIn
-unionTxIns allTxIns = Set.fromList $ map fst $ concatMap toList allTxIns
 
 unionTxOuts :: [Utxo] -> Utxo
 unionTxOuts = Map.unions

@@ -1,14 +1,10 @@
 module Cardano.Wallet.Kernel.Types (
     -- * Input resolution
     -- ** Raw types
-    ResolvedInput
-  , ResolvedTxInputs
+    ResolvedTxInputs
   , ResolvedBlockInputs
   , RawResolvedTx
   , RawResolvedBlock
-    -- ** Derived types
-  , ResolvedTx(..)
-  , ResolvedBlock(..)
     -- ** From raw to derived types
   , fromRawResolvedTx
   , fromRawResolvedBlock
@@ -22,6 +18,7 @@ import           Universum
 import           Pos.Core (MainBlock, Tx, TxAux (..), TxIn (..), TxOut, TxOutAux (..), gbBody,
                            mbTxs, mbWitnesses, txInputs, txOutputs)
 import           Pos.Crypto.Hashing (hash)
+import           Pos.Txp (Utxo)
 import           Serokell.Util (enumerate)
 
 import           Cardano.Wallet.Kernel.DB.InDb
