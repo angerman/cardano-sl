@@ -103,6 +103,41 @@ let
     connectScripts.testnet.explorer = [ "x86_64-linux" "x86_64-darwin" ];
   } skipPackages;
   mapped = mapTestOn platforms;
+
+  # this is quite stupid, and I'd prefer to be able to
+  # set the $X->$Y as part of the supportedSystems, however
+  # this is completely contrary to how nixpkgs wants this
+  # to do;  and trying to bend nixpkgs to my needs has resulted
+  # in loosing valuable amounts of hair.
+  #
+  # At the same time nixpkgs (master) started changing the
+  # appraoch in yet another incompatible way. As such we are
+  # likely stuck with this for a bit longer.
+  #
+  # Note that, intead of the custom system/crossSystem hack we
+  # did in cardano-sl#3291, we try to find a more unified appraoch
+  # here.
+  crossTests =
+    let
+      lin = f: testOnCross lib.systems.examples.mingwW64 [ "x86_64-linux" ] f;
+      mac = f: testOnCross lib.systems.examples.mingwW64 [ "x86_64-darwin" ] f;
+      libs = [ "cardano-sl" ];
+      exes = [ "cardano-sl-wallet-new" "cardano-sl-tools" ];
+    in
+      { nix-tools =
+       (builtins.foldl'
+         (acc: x: acc // { ${x} = {
+           "x86_64-linux->mingwW64"  = lin (pkgs: pkgs.nix-tools.${x});
+           "x86_64-darwin->mingwW64" = mac (pkgs: pkgs.nix-tools.${x}); }; })
+         {}
+         libs)
+        // { exes = (builtins.foldl'
+         (acc: x: acc // { ${x} = {
+           "x86_64-linux->mingwW64"  = lin (pkgs: pkgs.nix-tools.exes.${x});
+           "x86_64-darwin->mingwW64" = mac (pkgs: pkgs.nix-tools.exes.${x}); }; })
+         {}
+         exes); }; };
+
   mapped' = mapTestOn platforms';
   makeConnectScripts = cluster: let
   in {
@@ -125,7 +160,7 @@ let
     cardanoPkgs = import ./. { inherit system; };
     f = name: value: value.testrun;
   in pkgs.lib.mapAttrs f (lib.filterAttrs pred cardanoPkgs);
-in pkgs.lib.fix (jobsets: mapped // {
+in pkgs.lib.fix (jobsets: mapped // crossTests // {
   inherit tests;
   inherit (pkgs) cabal2nix;
   nixpkgs = let

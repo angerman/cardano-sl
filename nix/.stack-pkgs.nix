@@ -6,7 +6,7 @@
     {
       packages = mapAttrs (_:
         f:
-          mkForce (if isFunction f
+          (if isFunction f
             then f
             else import f)) ({
         "fmt" = hackage.fmt."0.6".revisions.default;

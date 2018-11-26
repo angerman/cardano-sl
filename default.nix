@@ -46,10 +46,11 @@ let
   localLib = import ./lib.nix;
 in
 { system ? builtins.currentSystem
+, crossSystem ? null
 , config ? {}  # The nixpkgs configuration file
 
 # Use a pinned version nixpkgs.
-, pkgs ? localLib.importPkgs { inherit system config; }
+, pkgs ? localLib.importPkgs { inherit system crossSystem config; }
 
 # SHA1 hash which will be embedded in binaries
 , gitrev ? localLib.commitIdFromGitRepo ./.git
@@ -297,7 +298,8 @@ let
                           then v.components.library
                           else null) nix-tools)
       // { exes = mapAttrs (k: v: if   length (attrValues v.components.exes) > 0
-                                  then pkgs.symlinkJoin { name = "${k}-exes"; paths = attrValues v.components.exes; }
+                                  then (if pkgs.stdenv.targetPlatform.isWindows then pkgs.copyJoin else pkgs.symlinkJoin)
+                                       { name = "${k}-exes"; paths = attrValues v.components.exes; }
                                   else null) nix-tools; };
   })
   );

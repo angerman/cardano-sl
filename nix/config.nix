@@ -6,6 +6,37 @@
 
   # sadly we need to patch GHC a bit.
   packageOverrides = ps: with ps; rec {
+       # use the pre-built rocksdb.
+       # We seem to be unable to actually
+       # build rocksdb with mingw64/gcc7
+       # without producing a partial dud.
+       #
+       # Using the pre-built rocksdb, also
+       # means we do not need the gcc7 hack
+       # in our nixpkgs to allow mingw with
+       # libwinpthreads.
+       rocksdb = with ps.stdenv;
+         if hostPlatform.isWindows
+         then pkgs.callPackage ./rocksdb-prebuilt.nix { inherit (buildPackages) fetchurl unzip; }
+         else ps.rocksdb;
+
+       # on windows we have this habit of putting libraries
+       # into `bin`, wheras on unix it's usually `lib`. For
+       # this confuses nix easily. So we'll just move the
+       # .dll's from `bin` into `$out/lib`. Such that they
+       # are trivially found.
+       openssl = ps.openssl.overrideAttrs (drv: {
+         postInstall = with ps.stdenv; drv.postInstall + lib.optionalString hostPlatform.isWindows ''
+           cp $bin/bin/*.dll $out/lib/
+         '';
+       });
+       mfpr = ps.mfpr.overrideAttrs (drv: {
+         configureFlags = with ps.stdenv; (drv.configureFlags or []) ++ lib.optional hostPlatform.isWindows "--enable-static --disable-shared";
+       });
+       libmpc = ps.libmpc.overrideAttrs (drv: {
+         configureFlags = with ps.stdenv; (drv.configureFlags or []) ++ lib.optional hostPlatform.isWindows "--enable-static --disable-shared";
+       });
+
     haskell = lib.recursiveUpdate ps.haskell {
       compiler.ghc844 = (ps.haskell.compiler.ghc844.override {
         ghcFlavour = if ps.stdenv.targetPlatform == ps.stdenv.hostPlatform
@@ -31,9 +62,9 @@
           ./patches/ghc/ghc-8.4.3-Cabal2201-response-file-support.patch
 #          ./patches/ghc/ghc-8.4.4-darwin-rec-link.patch
         ];
-        # postPatch = (drv.postPath or "") + ''
-        # autoreconf
-        # '';
+        postPatch = (drv.postPath or "") + ''
+        autoreconf
+        '';
       });
     };
   };
